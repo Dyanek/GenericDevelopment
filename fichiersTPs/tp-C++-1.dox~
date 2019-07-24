@@ -1,0 +1,419 @@
+/**
+   \page cpp_tp1 TP1 Traitement d'images en niveaux de gris (POO simple, surcharge d'opérateurs, entrées/sorties).
+  
+   \section cpp_tp1_1 1 - Objectifs, pointeurs utiles
+   
+   L'objectif de ce TP est de vous familiariser avec la programmation
+   object classique en C++. Il n'y aura pas explicitement de la
+   généricité, mais on définira néanmoins des objets classiques en
+   programmation générique (comme les itérateurs). A l'issue de cette
+   séance, vous maîtriserez:
+   
+   - la déclaration d'une classe, de ses constructeurs, de ses données membre, dans un fichier entête.
+   - la définition des méthodes de la classe dans un fichier source
+   - l'écriture de programmes principaux pour faire des commandes en ligne
+   - l'utilisation du container STL \c vector et du quasi-conteneur \c string
+   - la déclaration de types et de classes internes à une autre classe 
+   - la lecture et l'écriture dans un flux
+   - la surcharge de plusieurs opérateurs (incrémentation ++, décrémentation --, déréférencement *)
+   
+   Le fil conducteur est l'écriture d'une classe pour représenter les
+   images en niveaux de gris. Vous développerez un certain nombre de
+   services autour de ces images:
+   
+   - création d'image vide
+   - lecture/écriture d'images PGM (le format le plus simple possible de stockage)
+   - filtrage médian
+   - générateur de bruit impulsionnel
+   - histogramme de l'image
+   - correction de contraste par égalisation d'histogramme 
+   
+   Les sites suivants pourront être utile pendant le TP:
+   - [http://www.cplusplus.com/ Site C++: tutoriels, références]
+   - [http://www.parashift.com/c++-faq-lite/index.html C++ FAQ]
+
+   Note: Tout bon logiciel de manipulation d'image peut importer ou
+   exporter du portable pixmap (PBM, PGM, PPM). Le logiciel
+   ImageMagick (commandes `convert` et `display` notamment) est bien
+   pratique pour convertir en ligne de commande une image:
+
+   @verbatim
+   prompt> convert toto.jpg toto.pgm 
+   prompt> display toto.pgm 
+   @endverbatim
+
+   @note Il n'y a pas d'IDE recommandé plus particulièrement qu'un autre, mais je contaste:
+   - un étudiant sous Linux avec un éditeur de texte et la compilation via \c make démarre le TP en 5 minutes.
+   - un étudiant avec son IDE déjà bien configuré avant d'arriver en TP gagne 1h sur l'étudiant qui installe son IDE pendant le TP.
+   - la plupart des étudiants utilisent CodeBlocks, parfois Eclipse, parfois Visual C++
+   - Windows entraîne des problèmes supplémentaires: bibliothèques
+     manquantes, programme exécuté qui ne s'arrête jamais (vérifiez
+     votre antivirus, certains avaient des problèmes avec AVAST),
+     gestion des fichiers bizarre (Windows a deux modes: texte et
+     binaire; il faut donc rajouter le mode `ios::binary` ou `ios::text` à l'ouverture des fichiers)
+
+[TOC]
+
+   \section cpp_tp1_2 2 - Définition d'une classe pour représenter les images
+
+   Nous représenterons les images en niveaux de gris de façon
+   classique, avec un tableau de taille W*H de caractères (les niveaux
+   de gris sont un nombre entre 0 et 255), et W et H sont
+   respectivement la largeur et la hauteur de l'image. Vous déclarerez
+   donc la classe GrayLevelImage2D dans un fichier
+   GrayLevelImage2D.hpp. Un extrait du fichier entête donne:
+
+   @code
+   class GrayLevelImage2D {
+   public:
+   typedef unsigned char GrayLevel;         // le type pour les niveaux de gris.
+   typedef std::vector<GrayLevel> Container;// le type pour stocker les niveaux de gris de l'image.
+
+   // Constructeur par défaut
+   GrayLevelImage2D();
+   // Constructeur avec taille w x h. Remplit tout avec la valeur g (par défaut 0).
+   GrayLevelImage2D( int w, int h, GrayLevel g = 0 );
+
+   ... // du boulot
+
+   private:
+   std::vector<GrayLevel> m_data; // mes données; évitera de faire les allocations dynamiques
+   int m_width; // ma largeur
+   int m_height; // ma hauteur
+   };
+   @endcode
+
+   On utilisera la classe <a
+   href="http://www.cplusplus.com/reference/vector/vector/">std::vector</a>
+   de la STL. Cela nous évitera toute allocation dynamique ! Il suffit
+   soit de l'initialiser avec la bonne taille (i.e. donc largeur *
+   hauteur), soit d'appeler vector::resize pour changer la
+   taille. Ecrivez donc cette première version de la classe
+   GrayLevelImage2D, avec les deux constructeurs précisés. Faut-il
+   réécrire le constructeur par copie et l'affectation ?
+
+   NB: les méthodes seront écrites dans un fichier source GrayLevelImage2D.cpp.
+
+
+   \section cpp_tp1_3 3 - Accesseurs utiles (taille, valeurs de niveaux de gris).
+
+   Le principe est que les valeurs de l'image sont stockées les unes à
+   la suite des autres en balayant l'axe des x d'abord. Par exemple,
+   cela donne les indices suivants dans le tableau \c m_data:
+   
+   | Pixel (x,y): | (0,0) | (1,0) | ...   | (w-1,0) | (0,1) | (1,1) | ...   | (w-1,h-1) |
+   |--------------|-------|-------|-------|---------|-------|-------|-------|-----------|
+   | Indice       |   0   |    1  |       |  w-1    |  w    | w+1   |       | w*(h-1)+w-1|
+   
+   On écrira donc une méthode (privée) `int index( int x, int y )
+   const` qui retourne l'indice du pixel de coordonnées `(x,y)`.
+
+   Cette fonction sera utilisée partout où il faut convertir les
+   coordonnées en l'indice dans \c m_data.
+
+   On ajoutera aussi les méthodes suivantes:
+
+   \snippet GrayLevelImage2D.hpp gli2d-sec3
+
+   On testera les méthodes précédents en créant un fichier
+   testGrayLevelImage2D.cpp. Vous pourrez utiliser le \c Makefile suivant:
+
+   \include Makefile
+
+   Il vous suffira alors à vous de taper la commande ``make`` dans
+   votre terminal pour que tout soit compilé.
+
+   Le programme principal testGrayLevelImage2D.cpp contiendra au moins:
+
+   \snippet testGrayLevelImage2D.cpp tgli2d-sec3
+
+   qui devra fonctionner et afficher (bien sûr):
+   @verbatim
+ 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5
+   @endverbatim
+
+
+   \section cpp_tp1_4 4 - Un iterateur pour les images
+
+   Le programme précédent montre comment accéder pixel par pixel à
+   l'image. L'avantage est que l'on donne un sens géométrique aux
+   indices dans le tableau. C'est donc tout à fait pertinent dans les
+   cas où la position géométrique du pixel doit être exploité. En
+   revanche, il existe un certain nombre d'algorithmes où l'on ne fait
+   que traiter en séquence les valeurs de pixel, sans se préoccuper de
+   leur position. On peut citer:
+   - remplissage avec un valeur
+   - seuillage de l'image (toutes les valeurs inférieurs à \a s sont noires, les autres blanches), par exemple par la méthode d'Otsu.
+   - copie de l'image
+   - calcul de l'histogramme
+   - égalisation
+   - correction gamma
+   - import/export dans les formats de données "bruts".
+   - ...
+
+   Dans ce cas, il est utile de pouvoir énumérer (le plus rapidement
+   possible) les valeurs de l'image, comme si on parcourait
+   directement le tableau `m_data`.
+
+   Pour faire tout cela proprement, on introduit une classe \ref
+   Iterator, interne à GrayLevelImage2D, que l'on fait dériver de
+   `std::vector<GrayLevelImage2D>::iterator`. Cela permet de récupérer
+   tous les services usuels des itérateurs, en ajoutant des
+   possibilités supplémentaires si on veut faire évoluer nos
+   itérateurs. On écrira donc:
+
+   @code
+   struct Iterator : public Container::iterator {
+     Iterator( GrayLevelImage2D& Image, int x, int y );
+   }; 
+   @endcode
+
+   Il ne reste plus qu'à écrire le constructeur de Iterator à partir
+   d'une image et des coordonnées d'un pixel. On utilisera d'une part
+   la méthode `std::vector::begin()` pour récupérer un itérateur sur
+   le début du tableau, puis il suffira d'additionner l'indice du
+   pixel (x,y).
+
+   Il suffit maintenant d'écrire une méthode ``Iterator start( int x,
+   int y )`` dans GrayLevelImage2D qui fabrique l'itérateur qui
+   pointe sur la valeur du pixel (x,y) (c'est juste le bon appel du
+   constructeur de Iterator), puis les méthodes `begin` et `end` qui
+   sont des cas particuliers de `start`. 
+
+   @code
+   Iterator begin();  // pixel (0,0) -> le tout premier
+   Iterator end();    // pixel (w,h) -> juste après le dernier
+   Iterator start( int x, int y );
+   @endcode
+
+   Avec cela, on peut remplacer l'affichage de la section précédente
+   (\ref cpp_tp1_3) par le code suivant:
+
+   \snippet testGrayLevelImage2D.cpp tgli2d-sec4
+
+
+   \section cpp_tp1_5 5 - Import / Export en format PGM
+
+   Le format PGM [http://fr.wikipedia.org/wiki/Portable_pixmap PBM image format] permet de stocker très simplement les images en niveaux de gris sous forme de fichier. Le format PGM a deux formes, selon que les valeurs sont stockées en clair sous forme ASCII (le fichier est lisible et éditable, mais prend 3 fois plus de place sur le disque), ou stockées en format brut octet par octet.
+
+Exemple d'une image 256 x 256 stockée sous forme ascii.
+   @verbatim
+P2
+# CREATOR: XV Version 3.10a  Rev: 12/29/94 (PNG patch 1.2)
+256 256
+255
+0 0 1 10 53 67 45 0 12 12 ...
+   @endverbatim
+
+Exemple d'une image 256 x 256 stockée sous forme brute.
+   @verbatim
+P5
+# CREATOR: XV Version 3.10a  Rev: 12/29/94 (PNG patch 1.2)
+256 256
+255
+... le reste est illisible         
+   @endverbatim
+
+   Nous allons utiliser les flux (\c stream) pour représenter les
+   fichiers en entrée ou en sortie. On incluera les entêtes suivants:
+
+   @code
+   #include <string> // chaînes de caractères
+   #include <fstream> // flux sur les fichiers
+   #include <sstream> // flux sur les chaînes de caractères
+   @endcode
+   
+   On écrira donc les méthodes suivantes pour la classe GrayLevelImage2D.
+
+   @code
+   bool importPGM( std::istream & input );
+   bool exportPGM( std::ostream & output, bool ascii_mode = true ) const;
+   @endcode
+
+   Maintenant, pour ouvrir un fichier "toto.pgm" en lecture on écrira:
+
+   @code
+   // Ouvre le flux en entrée sur le fichier "toto.pgm"
+   ifstream input( "toto.pgm", std::ios::binary ); // le ios::binary est nécessaire seulement sous Windows.
+   // teste si tout va bien
+   if ( ! input.good() ) std::cerr << "Probleme !";
+   // par exemple, lit un entier:
+   int i;
+   input >> i;
+   // par exemple, lit un mot (s'arrête à un caractères de séparation.
+   std::string s;
+   input >> s;   
+   // par exemple, lit toute une ligne dans une chaîne de caractères.
+   std::getline( input, str );
+   if (( str != "" ) && (str[0]=='#')) 
+     std::cout << "C'est un commentaire shell !";
+   @endcode
+
+   On peut aussi utiliser une chaîne de caractères comme un flux,
+   grâce aux classes <a
+   href="http://www.cplusplus.com/reference/sstream/istringstream/">istringstream</a>
+   et <a
+   href="http://www.cplusplus.com/reference/sstream/ostringstream/">ostringstream</a>. Ainsi,
+   la chaîne "123 45 54" est décomposée en trois entiers ainsi:
+
+   @code
+   std::string s( "123 45 54" );
+   std::istringstream istr( s );
+   int x,y,z;
+   istr >> x >> y >> z; // x=123, y=45, z=54.
+   @endcode
+
+   Ecrire les méthodes `bool importPGM( std::istream & input )` et
+   `bool exportPGM( std::ostream & output, bool ascii_mode ) const` de
+   la classe GrayLevelImage2D, en utilisant les flux.
+   
+   On pourra maintenant lire un fichier image "lena.pgm" ainsi:
+
+   @code
+   GrayLevelImage2D img;
+   ifstream input( "lena.pgm" );
+   bool ok = img.importPGM( input );
+   if ( !ok ) std::cerr << "Hum !" << std::endl;
+   input.close();
+   @endcode
+
+   On testera nos fonctions avec le mini-programme `double-brightness.cpp` suivant, qui double
+   la brillance d'une image:
+
+   \include double-brightness.cpp
+
+   N'oubliez pas de mettre à jour le `Makefile`. Si vous l'exécutez
+   sur l'image `"lena.pgm"`, l'affichage donne:
+
+   @image html lena-d.png "Image lena.pgm après appel de double-brightness."
+
+
+   \section cpp_tp1_6 6 - Filtrage médian
+
+   Le filtrage médian est un algorithme très simple d'élimination de
+   bruit dans une image. Il est très pertinent pour ce que l'on
+   appelle le bruit impulsionnel, causé par des capteurs défectueux,
+   ce qui sature ou désature complètement la valeur de certains pixels
+   (ils deviennent tout blanc ou tout noir).
+
+   Son principe est le suivant. On se donne un voisinage autour de
+   chaque pixel (par exemple un voisinage 3x3). On met toutes les
+   valeurs de ces pixels dans un tableau (ici 9 valeurs). On remplace
+   la valeur du pixel par la valeur médiane des valeurs du tableau (On
+   peut par exemple trier le tableau et prendre la 5ème valeur).
+
+   Implémenter un algorithme de filtrage médian sous forme de commande
+   en-ligne `filtrage-median` similaire à `double-brightness`. On
+   pourra donner en plus un paramètre entier \a k, qui indique la
+   taille du voisinage (2k+1 x 2k+1) autour de chaque point.
+
+   <center>
+   <table>
+   <tr> 
+   <td> pourcentage de pixels "bruités"</td>
+   <td>image source</td> <td>taille voisinage</td> <td>résultat médian</td> 
+   </tr>
+   <tr>
+   <td>10%</td>
+   <td><img src="lena-imp-0_1.png"></td> 
+   <td>3x3</td>
+   <td><img src="lena-imp-0_1-fm-1.png"></td> 
+   </tr>
+   <tr> 
+   <td>50%</td>
+   <td><img src="lena-imp-0_5.png"></td> 
+   <td>7x7</td>
+   <td><img src="lena-imp-0_5-fm-3.png"></td> 
+   </tr>
+   <tr> 
+   <td>90%</td>
+   <td><img src="lena-imp-0_9.png"></td> 
+   <td>31x31</td>
+   <td><img src="lena-imp-0_9-fm-15.png"></td> 
+   </tr>
+   </table>
+   </center>
+
+   \section cpp_tp1_7 7 - Histogramme et Histogramme cumulé d'une image.
+
+   L'\b histogramme d'une image  \f$I\f$ en 256 niveaux de gris est une
+   fonction \f$h_I\f$ qui associe à chaque niveau de gris \a i la
+   proportion de pixels qui ont exactement ce niveau de gris:
+
+   \f[ h_I: \{0,\ldots,255 \} \rightarrow \lbrack 0,1 \rbrack, \quad i \mapsto h_I( i ) = \frac{\#\{(x,y), I(x,y)=i \}}{\#\{(x,y)\}} \f]
+
+   où \# désigne le nombre d'éléments d'un ensemble et les (x,y) sont
+   les pixels de l'image. En un sens, c'est la probabilité qu'un pixel pris au hasard ait un niveau de gris donné. Un autre outil
+important est l'\b histogramme \b cummulé \f$H_I\f$ d'une image \f$I\f$. Il s'agit simplement d'associer à chaque niveau de gris \a i la proportion de pixels qui ont
+   ce niveau de gris ou moins.
+
+   \f[ H_I: \{0,\ldots,255 \} \rightarrow \lbrack 0,1 \rbrack, \quad i \mapsto H_I( i ) = \frac{\#\{(x,y), I(x,y) \le i \}}{\#\{(x,y)\}} \f]
+
+   On note facilement que \f$ H_I(g) = \sum_{i=0}^g h_I(i) \f$. 
+
+   Un histogramme est dit \a bien \a balancé si à peu près tous les
+   niveaux de gris sont équiprobables. En général, une bonne photo a
+   un histogramme bien balancé. Une photo \a sous-exposée a tendance à
+   avoir un histogramme décalé vers les niveaux de gris sombres,
+   tandis qu'un photo \a sur-exposée a tendance à avoir un histogramme décalé vers les niveaux de gris clairs.
+
+   Or, on peut corriger automatiquement une image pour que son histogramme soit bien balancé. Cette opération s'appelle \b égalisation d'histogramme. Comment est-ce possible ? Il suffit de trouver une fonction \f$ f: \{0,\ldots,255\} \rightarrow \{0,\ldots,255\} \f$ qui transforme les niveaux de gris de façon à éclaircir ou assombrir au besoin l'image. Quelle est la bonne fonction \a f ? On la trouve en remarquant que l'histogramme cumulé d'une image bien balancée est la simplement la fonction \f$ i \mapsto
+i/255 \f$. On écrit donc:
+
+  \f[ \frac{i}{255} = H_{f \circ I}(i) \quad = \frac{\#\{(x,y), f \circ I(x,y) \le i \}}{\#\{(x,y)\}}
+  \quad = \frac{\#\{(x,y), I(x,y) \le f^{-1}(i) \}}{\#\{(x,y)\}}
+  \quad = H_{I}( f^{-1}(i))
+  \f]
+
+  En posant \f$ j=f^{-1}(i) \f$, il vient \f$ i = f(i) \f$, et l'équation précédente s'écrit:
+
+  \f[ \frac{f(j)}{255} =  H_{I}( j ) \f]
+
+  La fonction d'\b égalisation \a f est donc tout simplement :
+
+  \f[ f : j \mapsto f(j) = 255 * H_{I}( j ) \f]
+
+   Ecrivez une classe `Histogramme` qui contiendra deux tableaux de 256 entrées double, l'un pour \f$h_I\f$, l'autre pour \f$H_I\f$. Cette classe aura une méthode `void init( GrayLevelImage2D & img )`, qui parcourera l'image pour calculer son histogramme et son histogramme cummulé.
+
+   Ecrivez alors la méthode `int egalisation( int j ) const` dans la classe `Histogramme`. Il ne vaut reste plus qu'à faire le programme `egalise.cpp` qui utilise cette fonction d'égalisation sur tous les pixels de l'image. Sur l'image `lena.pgm` (légèrement sous-exposée) cela donne:
+
+
+
+   NB: On pourra regarder avec `gimp` l'histogramme des images (menu Couleurs > Niveaux).
+   
+   <center>
+   <table>
+   <tr> 
+   <td>image source</td> <td>image égalisée</td> 
+   </tr>
+   <tr>
+   <td><img src="lena.png"></td> 
+   <td><img src="lena-eg.png"></td> 
+   </tr>
+   </table>
+   </center>
+
+
+   \section cpp_tp1_A A - Générateur de bruit
+
+   Mais pourquoi voudrait-on abîmer les images ? Une raison
+   académique: pour tester ensuite les algorithmes de filtrage de
+   bruit et de restauration. Une autre raison est parfois esthétique,
+   par exemple pour donner l'illusion qu'une image fabriquer par
+   ordinateur est une vraie photo. Le code ci-dessous vous montre
+   comment on a généré le bruit impulsionnel ci-dessus.
+
+   \include bruit-impulsionnel.cpp
+
+   Il est plus réaliste d'appliquer un bruit Gaussien sur les images,
+   c'est-à-dire une perturbation de la valeur de gris par un écart qui
+   suit une loi normale (ou Gaussienne). La <a
+   href="http://fr.wikipedia.org/wiki/M%C3%A9thode_de_Box-Muller">méthode
+   de Box-Muller</a> est la plus simple pour le faire. Elle créé deux
+   valeurs aléatoires qui suivent une loi normale à partir de deux
+   valeurs qui suivent une loi uniforme (genre `rand01()`).
+
+   Ecrivez donc la commande `bruit-gaussien.cpp` en modifiant le
+   fichier `bruit-impulsionnel.cpp` ci-dessus.
+
+*/
